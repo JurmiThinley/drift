@@ -1,0 +1,279 @@
+// prisma/schema.prisma
+// Drift Database Schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================
+// AUTH (NextAuth.js)
+// ============================================
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ============================================
+// USERS
+// ============================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  passwordHash  String?
+  name          String?
+  image         String?
+  
+  // Subscription
+  subscriptionTier SubscriptionTier @default(FREE)
+  
+  // Preferences
+  timezone         String @default("UTC")
+  notificationTime String @default("09:00")
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  accounts      Account[]
+  sessions      Session[]
+  journeys      Journey[]
+}
+
+enum SubscriptionTier {
+  FREE
+  PREMIUM
+  ENTERPRISE
+}
+
+// ============================================
+// JOURNEYS
+// ============================================
+
+model Journey {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Journey details
+  transitionType TransitionType
+  initialFeeling FeelingType
+  initialContext String?        @db.Text
+  
+  // Progress
+  currentPhase Int           @default(1)
+  status       JourneyStatus @default(ACTIVE)
+  
+  // Stats
+  streakDays    Int @default(0)
+  longestStreak Int @default(0)
+  
+  // Timestamps
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations
+  conversations Conversation[]
+  checkIns      CheckIn[]
+  tasks         Task[]
+  milestones    Milestone[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+enum TransitionType {
+  CAREER
+  MOVE
+  PARENT
+  HEALTH
+  RELATIONSHIP
+  RETIREMENT
+}
+
+enum FeelingType {
+  OVERWHELMED
+  HOPEFUL
+  UNCERTAIN
+  ENERGIZED
+  STUCK
+  CAUTIOUSLY_OPTIMISTIC
+}
+
+enum JourneyStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ABANDONED
+}
+
+// ============================================
+// CONVERSATIONS
+// ============================================
+
+model Conversation {
+  id        String  @id @default(cuid())
+  journeyId String
+  journey   Journey @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  
+  // Session info
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+  
+  // Stats
+  messageCount Int @default(0)
+  
+  // AI context summary for long conversations
+  contextSummary String? @db.Text
+  
+  // Relations
+  messages Message[]
+
+  @@index([journeyId])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  
+  // Message content
+  role    MessageRole
+  content String      @db.Text
+  
+  // AI metadata
+  sentimentScore Float?
+  sentimentLabel String?
+  tokensUsed     Int?
+  
+  // Safety
+  flagged       Boolean @default(false)
+  flaggedReason String?
+  
+  // Timestamp
+  createdAt DateTime @default(now())
+
+  @@index([conversationId])
+  @@index([createdAt])
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+// ============================================
+// CHECK-INS
+// ============================================
+
+model CheckIn {
+  id        String  @id @default(cuid())
+  journeyId String
+  journey   Journey @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  
+  // Check-in data
+  moodScore  Int     // 1-5
+  reflection String? @db.Text
+  
+  // AI-generated insight
+  insight String? @db.Text
+  
+  // Date (one per day per journey)
+  checkInDate DateTime @db.Date
+  
+  createdAt DateTime @default(now())
+
+  @@unique([journeyId, checkInDate])
+  @@index([journeyId])
+}
+
+// ============================================
+// TASKS (Roadmap)
+// ============================================
+
+model Task {
+  id        String  @id @default(cuid())
+  journeyId String
+  journey   Journey @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  
+  // Task details
+  phase       Int
+  title       String
+  description String?
+  
+  // Status
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  
+  // Ordering
+  sortOrder Int @default(0)
+  
+  createdAt DateTime @default(now())
+
+  @@index([journeyId])
+}
+
+// ============================================
+// MILESTONES
+// ============================================
+
+model Milestone {
+  id        String  @id @default(cuid())
+  journeyId String
+  journey   Journey @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  
+  // Milestone details
+  milestoneKey String // e.g., 'first_conversation', 'week_1_complete'
+  title        String
+  description  String?
+  
+  achievedAt DateTime @default(now())
+
+  @@unique([journeyId, milestoneKey])
+  @@index([journeyId])
+}
