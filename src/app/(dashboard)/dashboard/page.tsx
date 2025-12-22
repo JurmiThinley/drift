@@ -3,12 +3,13 @@ import { redirect } from 'next/navigation';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/db/prisma';
 import Link from 'next/link';
-import { MessageCircle, Map, ArrowRight, LogOut } from 'lucide-react';
+import { MessageCircle, Map, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getGreeting } from '@/lib/utils';
 import { CheckInWidget } from '@/components/dashboard/check-in-widget';
 import { MoodHistory } from '@/components/dashboard/mood-history';
 import { ProgressStats } from '@/components/dashboard/progress-stats';
+import { Navbar } from '@/components/layout/navbar';
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
@@ -58,21 +59,7 @@ export default async function DashboardPage() {
   return (
     <main className="min-h-screen bg-gradient-to-br from-midnight-950 via-midnight-900 to-midnight-950">
       {/* Header */}
-      <header className="border-b border-border p-6">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <span className="font-display text-2xl text-drift-400">drift</span>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-muted-foreground hidden sm:block">
-              {session.user?.email}
-            </span>
-            <Link href="/api/auth/signout">
-              <Button variant="ghost" size="sm">
-                <LogOut className="w-4 h-4" />
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </header>
+      <Navbar email={session.user?.email} />
 
       <div className="max-w-5xl mx-auto p-6 space-y-8">
         {/* Welcome section */}

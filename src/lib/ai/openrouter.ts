@@ -37,7 +37,36 @@ export async function generateResponse(
       max_tokens: 1024,
     });
 
-    return response.choices[0]?.message?.content || "I'm here for you. Could you tell me more?";
+    let content = response.choices[0]?.message?.content || "I'm here for you. Could you tell me more?";
+
+// Clean up response - remove any system prompt leakage
+if (content.includes('[SYSTEM]') || content.includes('<s>')) {
+  // Find where the actual response starts (after system prompt)
+  const markers = ['</s>', '[/INST]', '## Guidelines', 'Hi ', 'Hello ', 'Hey '];
+  for (const marker of markers) {
+    const index = content.lastIndexOf(marker);
+    if (index !== -1 && marker.startsWith('Hi') || marker.startsWith('Hello') || marker.startsWith('Hey')) {
+      content = content.substring(index);
+      break;
+    }
+  }
+  // If still has system content, try to extract just the greeting
+  if (content.includes('[SYSTEM]')) {
+    const lines = content.split('\n');
+    const cleanLines = lines.filter(line => 
+      !line.includes('[SYSTEM]') && 
+      !line.includes('<s>') && 
+      !line.includes('##') &&
+      !line.includes('- They') &&
+      !line.includes('- You') &&
+      !line.includes('- Keep') &&
+      line.trim() !== ''
+    );
+    content = cleanLines.join('\n').trim();
+  }
+}
+
+return content;
   } catch (error) {
     console.error('OpenRouter API error:', error);
     throw new Error('Failed to generate response');
